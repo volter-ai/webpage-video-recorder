@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+public/bundle.js
+public/bundle.js.map
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Bun
+bun.lockb
