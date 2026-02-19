@@ -24,7 +24,7 @@ import {
  * Parse CLI arguments
  */
 const argv = yargs(hideBin(process.argv))
-  .usage('Usage: $0 --url <url> --duration <seconds> --output <file>')
+  .usage('Usage: $0 --url <url> --output <file> [--duration <seconds>]')
   .option('url', {
     alias: 'u',
     type: 'string',
@@ -34,8 +34,8 @@ const argv = yargs(hideBin(process.argv))
   .option('duration', {
     alias: 'd',
     type: 'number',
-    description: 'Recording duration in seconds',
-    demandOption: true
+    description: 'Recording duration in seconds (optional if auto-detection enabled)',
+    demandOption: false
   })
   .option('output', {
     alias: 'o',
@@ -75,7 +75,7 @@ const argv = yargs(hideBin(process.argv))
   .option('auto-detect-duration', {
     type: 'boolean',
     description: 'Auto-detect video duration from DOM',
-    default: false
+    default: true
   })
   .option('buffer', {
     alias: 'b',
@@ -110,9 +110,9 @@ const argv = yargs(hideBin(process.argv))
     description: 'Log network requests',
     default: false
   })
-  .example('$0 --url "https://example.com/video" --duration 30 --output recording.mp4', 'Record a 30-second video')
-  .example('$0 -u "https://example.com" -d 60 -o out.mp4 -r 1280x720', 'Record with custom resolution')
-  .example('$0 -u "https://example.com" -d 60 -o out.mp4 --click-selector ".play-btn"', 'Click play button before recording')
+  .example('$0 --url "https://example.com/video" --output recording.mp4', 'Auto-detect video duration')
+  .example('$0 -u "https://example.com/video" -d 30 -o recording.mp4', 'Record with manual 30-second duration')
+  .example('$0 -u "https://example.com" -o out.mp4 -r 1280x720', 'Auto-detect with custom resolution')
   .help('h')
   .alias('h', 'help')
   .version('1.0.0')
@@ -132,19 +132,41 @@ async function main() {
   const outputPath = resolve(argv.output);
   const duration = argv.duration;
   const bufferTime = argv.buffer;
-  const totalRecordingTime = duration + bufferTime;
+
+  // Validate duration arguments
+  if (!argv.duration && !argv['auto-detect-duration']) {
+    log('ERROR: Either --duration must be provided or --auto-detect-duration must be enabled');
+    process.exit(1);
+  }
+
+  if (argv['auto-detect-duration']) {
+    log('Auto-detection enabled: video duration will be extracted from DOM');
+    if (argv.duration) {
+      log(`Manual duration (${argv.duration}s) will be used as fallback if auto-detection fails`);
+    }
+  } else {
+    log(`Manual duration: ${argv.duration}s`);
+  }
 
   log(`URL: ${argv.url}`);
-  log(`Duration: ${duration}s (+ ${bufferTime}s buffer = ${totalRecordingTime}s total)`);
+  if (argv.duration) {
+    log(`Duration: ${duration}s (+ ${bufferTime}s buffer = ${duration + bufferTime}s total)`);
+  } else {
+    log(`Duration: Auto-detect from video element (+ ${bufferTime}s buffer)`);
+  }
   log(`Output: ${outputPath}`);
   log(`Resolution: ${argv.resolution}`);
   log(`Framerate: ${argv.framerate} fps`);
   log(`Quality (CRF): ${argv.quality}`);
   log(`Preset: ${argv.preset}`);
 
-  // Estimate file size
-  const estimatedSize = estimateFileSize(totalRecordingTime, argv.resolution, argv.framerate, argv.quality);
-  log(`Estimated file size: ~${estimatedSize} MB`);
+  // Estimate file size (only if duration is known)
+  if (argv.duration) {
+    const estimatedSize = estimateFileSize(duration + bufferTime, argv.resolution, argv.framerate, argv.quality);
+    log(`Estimated file size: ~${estimatedSize} MB`);
+  } else {
+    log('File size: Will be determined after auto-detecting video duration');
+  }
 
   log('='.repeat(70));
 
@@ -222,10 +244,24 @@ async function main() {
 
       // Auto-detect duration if enabled
       let actualDuration = duration;
-      if (argv['auto-detect-duration'] && videoMetadata.autoDetectedDuration) {
-        actualDuration = Math.ceil(videoMetadata.autoDetectedDuration);
-        log(`Auto-detected video duration: ${actualDuration}s`);
-        log(`Recording will capture: ${actualDuration}s (+ ${bufferTime}s buffer)`);
+      if (argv['auto-detect-duration']) {
+        if (videoMetadata.autoDetectedDuration && videoMetadata.autoDetectedDuration > 0) {
+          actualDuration = Math.ceil(videoMetadata.autoDetectedDuration);
+          log(`✓ Auto-detected video duration: ${actualDuration}s`);
+          log(`Recording will capture: ${actualDuration}s (+ ${bufferTime}s buffer)`);
+        } else {
+          // Auto-detection failed
+          if (argv.duration) {
+            log('⚠ Auto-detection failed, using fallback manual duration');
+            actualDuration = duration;
+          } else {
+            throw new Error(
+              'Failed to auto-detect video duration. ' +
+              'The video element may not have duration metadata (e.g., live stream). ' +
+              'Please provide a manual duration with --duration <seconds>.'
+            );
+          }
+        }
       }
 
       log('Video is playing');
