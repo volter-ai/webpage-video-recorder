@@ -214,7 +214,8 @@ async function main() {
       log('\n[4/7] Launching browser...');
       browser = await launchBrowser(displayInfo.displayNumber, {
         width: parseInt(argv.resolution.split('x')[0]),
-        height: parseInt(argv.resolution.split('x')[1])
+        height: parseInt(argv.resolution.split('x')[1]),
+        pulseServer: audioInfo.pulseServer
       });
 
       // Step 5: Navigate and setup page

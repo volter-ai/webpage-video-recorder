@@ -17,7 +17,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xfonts-base \
     xfonts-100dpi \
     xfonts-75dpi \
-    xfonts-cyrillic \
     xfonts-scalable \
     # Video recording
     ffmpeg \
