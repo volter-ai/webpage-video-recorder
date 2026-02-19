@@ -1,27 +1,43 @@
 # Dependencies
 node_modules/
+package-lock.json
 
-# Build output
-public/bundle.js
-public/bundle.js.map
+# Recordings (output files)
+recordings/
+*.mp4
+*.webm
+*.mkv
+*.avi
+*.mov
 
 # Environment
 .env
 .env.local
+.env.*.local
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
+*~
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
+*.sublime-project
+*.sublime-workspace
 
 # Logs
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Bun
-bun.lockb
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Docker volumes
+.docker/

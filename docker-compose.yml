@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  recorder:
+    build: .
+    image: webpage-recorder
+    container_name: webpage-recorder
+
+    # Mount recordings directory to host
+    volumes:
+      - ./recordings:/app/recordings
+
+    # Environment variables
+    environment:
+      - DISPLAY=:99
+      - NODE_ENV=production
+
+    # Default command - record a sample video
+    # Override this with your own URL and settings
+    command: >
+      --url "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+      --duration 10
+      --output /app/recordings/recording.mp4
+      --resolution 1280x720
+      --video-selector "video"
+
+    # Limit resources (optional)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+# Example usage:
+#
+# Build and run with default settings:
+#   docker-compose up
+#
+# Run with custom URL and duration:
+#   docker-compose run --rm recorder \
+#     --url "https://example.com/video" \
+#     --duration 60 \
+#     --output /app/recordings/my-recording.mp4
+#
+# Run with custom resolution and quality:
+#   docker-compose run --rm recorder \
+#     --url "https://example.com/video" \
+#     --duration 30 \
+#     --output /app/recordings/hd-recording.mp4 \
+#     --resolution 1920x1080 \
+#     --quality 18 \
+#     --preset slow
+#
+# Build image only:
+#   docker-compose build
+#
+# Remove containers and volumes:
+#   docker-compose down -v

@@ -1,0 +1,62 @@
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Recordings
+recordings/
+*.mp4
+*.webm
+*.mkv
+*.avi
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Documentation (don't need in image)
+README.md
+CHANGELOG.md
+LICENSE
+
+# Test files
+test/
+tests/
+*.test.js
+*.spec.js
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Docker
+docker-compose.yml
+docker-compose.*.yml
+Dockerfile.dev
+
+# Temporary files
+tmp/
+temp/
+*.tmp

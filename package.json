@@ -1,27 +1,31 @@
 {
-  "name": "bun-boilerplate",
+  "name": "webpage-video-recorder",
   "version": "1.0.0",
-  "description": "True Bun 1.3.1 boilerplate with native dev server, console: true, and React 19",
+  "description": "Automated webpage video screen recorder using Node.js, Puppeteer, Xvfb, ffmpeg, and PulseAudio",
   "type": "module",
-  "private": true,
+  "bin": {
+    "record": "./record.js"
+  },
   "scripts": {
-    "dev": "bun run server.ts",
-    "build": "bun build ./src/index.tsx --outdir ./public --entry-naming bundle.js --minify",
-    "start": "NODE_ENV=production bun run server.ts",
-    "deploy": "bun run deploy.ts"
+    "record": "node record.js",
+    "docker:build": "docker build -t webpage-recorder .",
+    "docker:run": "docker-compose up"
   },
-  "devDependencies": {
-    "@subscribe.dev/sdk": "^1.0.6",
-    "@types/bun": "latest",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
-    "jszip": "^3.10.1"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  },
+  "keywords": [
+    "screen-recorder",
+    "video",
+    "puppeteer",
+    "xvfb",
+    "ffmpeg",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
   "dependencies": {
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "puppeteer": "^22.0.0",
+    "yargs": "^17.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

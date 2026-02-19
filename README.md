@@ -1,133 +1,373 @@
-# Bun 1.3.1 Boilerplate
+# Webpage Video Recorder
 
-A **true Bun boilerplate** using Bun's native development server, bundler, and the revolutionary `console: true` feature that pipes frontend console logs to your backend terminal.
+Automated screen recorder for capturing webpage videos with synchronized audio using Node.js, Puppeteer, Xvfb, ffmpeg, and PulseAudio.
 
-## 🚀 Features
+## Features
 
-- ⚡️ **Bun 1.3.1** - Lightning-fast JavaScript runtime
-- 🔥 **Native Bun Dev Server** - No Vite, no Webpack, pure Bun
-- 🖥️ **`console: true`** - Frontend `console.log()` appears in backend terminal!
-- ⚛️ **React 19** - Latest React with hooks
-- 🎨 **TypeScript** - Full type safety
-- 📦 **Native Bun Bundler** - Fast builds with `Bun.build()`
-- 🔄 **Hot Reload** - File watching with automatic rebuilds
+- Record any webpage with video content
+- Capture both video and audio in sync
+- Headless operation using Xvfb (X Virtual Framebuffer)
+- Configurable resolution, framerate, and quality
+- Docker support for easy deployment
+- Automatic cleanup of system resources
+- Auto-detection of video duration
+- Custom click selectors for play buttons
+- Production-ready error handling
 
-## 📦 Installation
+## Architecture
+
+```
+┌─────────────┐
+│   Xvfb      │  Virtual display (:99)
+│  (Display)  │  Renders browser at specified resolution
+└──────┬──────┘
+       │
+       ↓
+┌─────────────┐
+│  Puppeteer  │  Headful Chrome/Chromium browser
+│  (Browser)  │  Navigates to URL and plays video
+└──────┬──────┘
+       │
+       ↓
+┌─────────────┐
+│ PulseAudio  │  Virtual audio sink
+│   (Audio)   │  Captures browser audio output
+└──────┬──────┘
+       │
+       ↓
+┌─────────────┐
+│   ffmpeg    │  Screen + audio capture
+│ (Recorder)  │  Encodes to MP4 with H.264 + AAC
+└──────┬──────┘
+       │
+       ↓
+    Output.mp4
+```
+
+## Prerequisites
+
+### For Docker (Recommended)
+
+- Docker 20.10+
+- Docker Compose 1.29+
+
+### For Local Installation
+
+- Node.js 18.0+
+- Xvfb: `apt-get install xvfb`
+- ffmpeg: `apt-get install ffmpeg`
+- PulseAudio: `apt-get install pulseaudio pulseaudio-utils`
+- Chromium/Chrome browser
+
+## Installation
+
+### Docker (Recommended)
 
 ```bash
 # Clone the repository
-git clone https://github.com/yueranyuan/bun-boilerplate.git
-cd bun-boilerplate
+git clone <repository-url>
+cd webpage-video-recorder
 
+# Build the Docker image
+docker-compose build
+
+# Or build manually
+docker build -t webpage-recorder .
+```
+
+### Local Installation
+
+```bash
 # Install dependencies
-bun install
+npm install
+
+# Make CLI executable globally (optional)
+npm link
+
+# Or run directly with node
+node record.js --help
 ```
 
-## 🛠️ Usage
+## Usage
 
-### Development
+### Basic Usage
 
 ```bash
-bun run dev
+# Record a 30-second video
+node record.js \
+  --url "https://example.com/video" \
+  --duration 30 \
+  --output recording.mp4
 ```
 
-This starts the Bun dev server at `http://localhost:3000` with:
-- Hot reload watching `src/` directory
-- Frontend console logs piped to terminal
-- Source maps for debugging
-
-### Production Build
+### Docker Usage
 
 ```bash
-bun run build
-bun run start
+# Using docker-compose (easiest)
+docker-compose run --rm recorder \
+  --url "https://example.com/video" \
+  --duration 30 \
+  --output /app/recordings/recording.mp4
+
+# Using docker directly
+docker run --rm -v $(pwd)/recordings:/app/recordings webpage-recorder \
+  --url "https://example.com/video" \
+  --duration 30 \
+  --output /app/recordings/recording.mp4
 ```
 
-### Deploy to Subscribe.dev
+### Advanced Examples
 
-Deploy your app to production with one command:
+#### Custom Resolution and Quality
 
 ```bash
-# Build first
-bun run build
-
-# Deploy (requires Subscribe.dev platform API key)
-SUBSCRIBE_DEV_PLATFORM_API_KEY=sdp_xxx bun run deploy
+node record.js \
+  --url "https://example.com/video" \
+  --duration 60 \
+  --output recording.mp4 \
+  --resolution 1920x1080 \
+  --framerate 60 \
+  --quality 18 \
+  --preset slow
 ```
 
-Get your platform API key from [Subscribe.dev Dashboard](https://subscribe.dev)
+#### Click Play Button Before Recording
 
-**What happens:**
-1. Creates a ZIP bundle from your `public/` folder
-2. Uploads to Subscribe.dev via S3
-3. Deploys with deterministic project-based URL
-4. Returns your live URL (e.g., `https://abc123.apps.subscribe.dev`)
-
-The deployment script (`deploy.ts`) uses the same robust S3 upload flow that the Subscribe.dev dashboard uses, ensuring proper file extraction and serving.
-
-## 🎯 The `console: true` Feature
-
-The killer feature of Bun 1.3.1 is `development: { console: true }` in `Bun.serve()`.
-
-**What it does:**
-- All `console.log()`, `console.error()`, etc. from your **frontend React code**
-- Automatically appear in your **backend terminal**
-- Perfect for debugging without opening browser DevTools
-
-**Example:**
-```typescript
-// In your React component
-console.log('Button clicked!', someData)
+```bash
+node record.js \
+  --url "https://example.com/video" \
+  --duration 30 \
+  --output recording.mp4 \
+  --click-selector ".play-button" \
+  --click-selector ".accept-cookies"
 ```
 
-**You'll see in terminal:**
-```
-[Frontend] Button clicked! { count: 5 }
-```
+#### Auto-Detect Video Duration
 
-## 📁 Project Structure
-
-```
-bun-boilerplate/
-├── src/
-│   ├── App.tsx          # Main React component
-│   └── index.tsx        # React entry point
-├── public/
-│   ├── index.html       # HTML template
-│   └── bundle.js        # Built bundle (generated)
-├── server.ts            # Bun dev server with console: true
-├── package.json
-└── tsconfig.json
+```bash
+node record.js \
+  --url "https://example.com/video" \
+  --duration 0 \
+  --output recording.mp4 \
+  --auto-detect-duration
 ```
 
-## 🔧 How It Works
+#### Custom Video Selector
 
-1. **`server.ts`** - Bun server with `Bun.serve()` and `development: { console: true }`
-2. **`Bun.build()`** - Native bundler compiles React/TypeScript to `public/bundle.js`
-3. **File watcher** - Watches `src/` and rebuilds on changes
-4. **Console proxying** - Frontend logs forwarded to backend terminal
+```bash
+node record.js \
+  --url "https://example.com/video" \
+  --duration 30 \
+  --output recording.mp4 \
+  --video-selector "#player-video"
+```
 
-## 🆚 Why Not Vite?
+## CLI Options
 
-**Vite** is great, but it's not a "Bun boilerplate" - it's a Node.js tool that happens to work with Bun as a package manager.
+| Option | Alias | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--url` | `-u` | string | required | URL of the webpage to record |
+| `--duration` | `-d` | number | required | Recording duration in seconds |
+| `--output` | `-o` | string | required | Output file path |
+| `--resolution` | `-r` | string | `1920x1080` | Video resolution (WIDTHxHEIGHT) |
+| `--framerate` | `-f` | number | `30` | Video framerate (fps) |
+| `--display` | | number | `99` | X display number to use |
+| `--video-selector` | `-s` | string | `video` | CSS selector for video element |
+| `--click-selector` | `-c` | array | `[]` | CSS selectors to click before recording |
+| `--auto-detect-duration` | | boolean | `false` | Auto-detect video duration from DOM |
+| `--buffer` | `-b` | number | `2` | Extra buffer time after duration (seconds) |
+| `--quality` | `-q` | number | `23` | Video quality (CRF: 0-51, lower is better) |
+| `--preset` | | string | `fast` | ffmpeg encoding preset |
+| `--audio-bitrate` | | string | `128k` | Audio bitrate |
+| `--log-console` | | boolean | `false` | Log browser console messages |
+| `--log-requests` | | boolean | `false` | Log network requests |
 
-**This boilerplate** uses:
-- ✅ Bun's native dev server
-- ✅ Bun's native bundler
-- ✅ Bun-specific features like `console: true`
-- ✅ Pure Bun runtime (no Node.js dependencies)
+### ffmpeg Presets
 
-## 📚 Learn More
+- `ultrafast`: Fastest encoding, largest file size
+- `superfast`, `veryfast`, `faster`, `fast`: Balanced options
+- `medium`: Default ffmpeg preset
+- `slow`, `slower`, `veryslow`: Best quality, slowest encoding
 
-- [Bun Documentation](https://bun.sh/docs)
-- [Bun.serve() API](https://bun.sh/docs/api/http)
-- [Bun.build() API](https://bun.sh/docs/bundler)
-- [React Documentation](https://react.dev)
+### Video Quality (CRF)
 
-## 📝 License
+- `0-17`: Visually lossless (large files)
+- `18-23`: High quality (recommended)
+- `24-28`: Medium quality
+- `29-51`: Lower quality (smaller files)
 
-MIT
+## Output
 
-## 🤝 Contributing
+The tool generates MP4 files with the following specifications:
 
-Contributions welcome! This is meant to be a minimal, clean starting point for Bun + React projects.
+- **Video Codec**: H.264 (libx264)
+- **Audio Codec**: AAC
+- **Pixel Format**: yuv420p (universal compatibility)
+- **Container**: MP4 with faststart flag (web streaming)
+
+## Workflow
+
+The recording process follows these steps:
+
+1. **Start Xvfb** - Creates virtual display at specified resolution
+2. **Setup PulseAudio** - Creates virtual audio sink for browser
+3. **Start ffmpeg** - Begins screen and audio capture
+4. **Launch Browser** - Opens Puppeteer with headed Chrome
+5. **Navigate** - Loads the target URL
+6. **Play Video** - Finds and plays the video element
+7. **Record** - Waits for specified duration
+8. **Cleanup** - Stops recording and cleans up resources
+
+## Troubleshooting
+
+### Video Element Not Found
+
+```bash
+# Use custom selector
+--video-selector "#custom-video-id"
+
+# Wait longer for page load
+# (modify timeout in lib/browser.js)
+```
+
+### Audio Not Captured
+
+```bash
+# Check PulseAudio is running
+pulseaudio --check || pulseaudio --start
+
+# Verify virtual sink
+pactl list sinks | grep recording_sink
+```
+
+### Browser Crashes
+
+```bash
+# Increase shared memory (Docker)
+docker run --shm-size=2gb ...
+
+# Or disable /dev/shm usage
+--disable-dev-shm-usage flag is already included
+```
+
+### ffmpeg Errors
+
+```bash
+# Check ffmpeg installation
+ffmpeg -version
+
+# Verify display is accessible
+echo $DISPLAY
+xdpyinfo -display :99
+```
+
+### Recording Shows Black Screen
+
+- Ensure Xvfb started successfully
+- Verify DISPLAY environment variable is set
+- Check browser is rendering (not headless mode)
+
+### Audio Out of Sync
+
+- Use consistent framerate (30 or 60 fps)
+- Ensure PulseAudio virtual sink is set as default
+- Check system is not overloaded during recording
+
+## File Size Estimation
+
+Approximate file sizes for 1 minute of recording:
+
+| Resolution | Framerate | Quality (CRF) | File Size |
+|------------|-----------|---------------|-----------|
+| 1280x720 | 30 fps | 23 | ~15 MB |
+| 1920x1080 | 30 fps | 23 | ~25 MB |
+| 1920x1080 | 60 fps | 23 | ~45 MB |
+| 2560x1440 | 30 fps | 18 | ~60 MB |
+
+## Development
+
+### Project Structure
+
+```
+webpage-video-recorder/
+├── lib/
+│   ├── cleanup.js      # Resource cleanup coordinator
+│   ├── display.js      # Xvfb lifecycle management
+│   ├── audio.js        # PulseAudio virtual sink management
+│   ├── recorder.js     # ffmpeg recording orchestration
+│   └── browser.js      # Puppeteer navigation & video playback
+├── record.js           # Main CLI script
+├── package.json        # Node.js dependencies
+├── Dockerfile          # Docker image definition
+└── docker-compose.yml  # Docker Compose configuration
+```
+
+### Running Tests
+
+```bash
+# Test basic recording
+npm run record -- \
+  --url "https://www.youtube.com/watch?v=dQw4w9WgXcQ" \
+  --duration 10 \
+  --output test-recording.mp4
+```
+
+### Building Docker Image
+
+```bash
+# Build image
+docker build -t webpage-recorder .
+
+# Test image
+docker run --rm webpage-recorder --help
+```
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DISPLAY` | X display number | `:99` |
+| `PUPPETEER_EXECUTABLE_PATH` | Path to Chrome/Chromium | Auto-detected |
+| `PULSE_SERVER` | PulseAudio server socket | `unix:/tmp/pulseaudio.socket` |
+
+## Performance Considerations
+
+- CPU: 2+ cores recommended
+- RAM: 2GB minimum, 4GB recommended
+- Disk: ~50MB/minute for 1080p video
+- Network: Bandwidth depends on webpage content
+
+## Security Notes
+
+- The tool runs Chromium with `--no-sandbox` flag (required for Docker)
+- Disable web security is enabled to allow cross-origin content
+- Always run in isolated environment (container) for untrusted URLs
+- Recordings may contain sensitive content from webpages
+
+## License
+
+MIT License
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## Support
+
+For issues and questions:
+- Open an issue on GitHub
+- Check existing issues for solutions
+- Review troubleshooting section above
+
+## Credits
+
+Built with:
+- [Node.js](https://nodejs.org/) - JavaScript runtime
+- [Puppeteer](https://pptr.dev/) - Browser automation
+- [ffmpeg](https://ffmpeg.org/) - Video encoding
+- [Xvfb](https://www.x.org/releases/X11R7.6/doc/man/man1/Xvfb.1.xhtml) - Virtual display
+- [PulseAudio](https://www.freedesktop.org/wiki/Software/PulseAudio/) - Audio system
+- [yargs](https://yargs.js.org/) - CLI argument parsing
