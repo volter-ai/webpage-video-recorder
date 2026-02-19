@@ -10,13 +10,17 @@ import { hideBin } from 'yargs/helpers';
 import { resolve } from 'path';
 import { cleanupManager, log, sleep } from './lib/cleanup.js';
 import { startDisplay, stopDisplay } from './lib/display.js';
-import { setupAudioRecording, cleanupAudioRecording } from './lib/audio.js';
+import { setupAudioRecording, cleanupAudioRecording, moveBrowserSinkInputs } from './lib/audio.js';
 import { startRecording, stopRecording, estimateFileSize } from './lib/recorder.js';
 import {
   launchBrowser,
   createPage,
   navigateToUrl,
-  findAndPlayVideo,
+  setFullscreen,
+  findVideoElement,
+  getVideoMetadata,
+  playVideo,
+  clickIfExists,
   closeBrowser
 } from './lib/browser.js';
 import {
@@ -59,8 +63,8 @@ const argv = yargs(hideBin(process.argv))
   })
   .option('concurrency', {
     type: 'number',
-    description: 'Number of parallel recordings (default: 1 = sequential)',
-    default: 1
+    description: 'Number of parallel recordings',
+    default: 3
   })
   .option('resolution', {
     alias: 'r',
@@ -206,30 +210,81 @@ async function recordUrl(options) {
   jlog(`Output: ${outputPath}`);
   jlog(`Resolution: ${resolution}`);
 
-  try {
-  await cleanupManager.withCleanup(async (cleanup) => {
-    let displayInfo, audioInfo, ffmpegProcess, browser;
+  const parsedWidth = parseInt(resolution.split('x')[0]);
+  const parsedHeight = parseInt(resolution.split('x')[1]);
+  let displayInfo, audioInfo, ffmpegProcess, browser;
 
+  try {
     // Step 1: Start virtual display
     jlog('Starting virtual display...');
     displayInfo = await startDisplay(displayStartNumber, resolution + 'x24', true);
-    cleanup.trackProcess(`${jobId}-xvfb`, displayInfo.process);
     jlog(`Display :${displayInfo.displayNumber} started`);
 
-    // Step 2: Setup audio recording
+    // Step 2: Setup audio
     jlog('Setting up audio environment...');
-    audioInfo = await setupAudioRecording(sinkName, {
-      skipDefault: parallelMode
-    });
+    audioInfo = await setupAudioRecording(sinkName, { skipDefault: parallelMode });
     jlog(`Audio sink: ${audioInfo.sinkName}`);
-    jlog(`Audio monitor: ${audioInfo.monitorName}`);
 
-    // Register audio cleanup handler
-    cleanup.registerCleanupHandler(async () => {
-      await cleanupAudioRecording(audioInfo.sinkName);
+    // Step 3: Launch browser and navigate (before recording, so page is loaded)
+    jlog('Launching browser...');
+    browser = await launchBrowser(displayInfo.displayNumber, {
+      width: parsedWidth,
+      height: parsedHeight,
+      pulseServer: audioInfo.pulseServer
     });
 
-    // Step 3: Start ffmpeg recording BEFORE browser
+    jlog('Navigating to URL...');
+    const page = await createPage(browser, {
+      width: parsedWidth,
+      height: parsedHeight,
+      logConsole,
+      logRequests
+    });
+
+    await navigateToUrl(page, url, {
+      timeout: 60000,
+      waitUntil: 'networkidle2'
+    });
+
+    // Enter fullscreen to hide URL bar and browser chrome
+    jlog('Entering fullscreen...');
+    await setFullscreen(page);
+
+    // Step 4: Find video element and get metadata (but don't play yet)
+    jlog('Finding video element...');
+    await findVideoElement(page, videoSelector);
+
+    // Click any specified elements first (play buttons, etc.)
+    for (const sel of clickSelectors) {
+      await clickIfExists(page, sel);
+      await sleep(500);
+    }
+
+    const videoMetadata = await getVideoMetadata(page, videoSelector);
+    jlog(`Video found: ${videoMetadata.videoWidth}x${videoMetadata.videoHeight}`);
+    jlog(`Video source: ${videoMetadata.src || videoMetadata.currentSrc}`);
+
+    // Auto-detect duration
+    let actualDuration = duration;
+    if (autoDetectDuration) {
+      if (videoMetadata.duration && videoMetadata.duration > 0 && isFinite(videoMetadata.duration)) {
+        actualDuration = Math.ceil(videoMetadata.duration);
+        jlog(`Auto-detected video duration: ${actualDuration}s`);
+      } else if (duration) {
+        jlog('Auto-detection failed, using fallback manual duration');
+        actualDuration = duration;
+      } else {
+        throw new Error(
+          'Failed to auto-detect video duration. ' +
+          'Please provide a manual duration with --duration <seconds>.'
+        );
+      }
+    }
+
+    const totalTime = actualDuration + bufferTime;
+    jlog(`Recording will capture: ${totalTime}s (${actualDuration}s + ${bufferTime}s buffer)`);
+
+    // Step 5: Start ffmpeg recording (page is loaded and ready)
     jlog('Starting ffmpeg recording...');
     ffmpegProcess = await startRecording({
       displayNumber: displayInfo.displayNumber,
@@ -241,74 +296,24 @@ async function recordUrl(options) {
       preset,
       audioBitrate
     });
-    cleanup.trackProcess(`${jobId}-ffmpeg`, ffmpegProcess);
     jlog('Recording started');
+    await sleep(1000);
 
-    // Wait a moment to ensure recording is stable
-    await sleep(2000);
+    // Step 6: Play video (ffmpeg is already capturing)
+    jlog('Playing video...');
+    await playVideo(page, videoSelector);
 
-    // Step 4: Launch browser
-    jlog('Launching browser...');
-    browser = await launchBrowser(displayInfo.displayNumber, {
-      width: parseInt(resolution.split('x')[0]),
-      height: parseInt(resolution.split('x')[1]),
-      pulseServer: audioInfo.pulseServer,
-      defaultSinkName: parallelMode ? sinkName : null
-    });
-
-    // Step 5: Navigate and setup page
-    jlog('Navigating to URL...');
-    const page = await createPage(browser, {
-      width: parseInt(resolution.split('x')[0]),
-      height: parseInt(resolution.split('x')[1]),
-      logConsole,
-      logRequests
-    });
-
-    await navigateToUrl(page, url, {
-      timeout: 60000,
-      waitUntil: 'networkidle2'
-    });
-
-    // Step 6: Find and play video
-    jlog('Finding and playing video...');
-    const videoMetadata = await findAndPlayVideo(page, {
-      videoSelector,
-      clickSelectors,
-      autoDetectDuration
-    });
-
-    jlog(`Video found: ${videoMetadata.videoWidth}x${videoMetadata.videoHeight}`);
-    jlog(`Video source: ${videoMetadata.src}`);
-
-    // Auto-detect duration if enabled
-    let actualDuration = duration;
-    if (autoDetectDuration) {
-      if (videoMetadata.autoDetectedDuration && videoMetadata.autoDetectedDuration > 0) {
-        actualDuration = Math.ceil(videoMetadata.autoDetectedDuration);
-        jlog(`Auto-detected video duration: ${actualDuration}s`);
-        jlog(`Recording will capture: ${actualDuration}s (+ ${bufferTime}s buffer)`);
-      } else {
-        // Auto-detection failed
-        if (duration) {
-          jlog('Auto-detection failed, using fallback manual duration');
-          actualDuration = duration;
-        } else {
-          throw new Error(
-            'Failed to auto-detect video duration. ' +
-            'The video element may not have duration metadata (e.g., live stream). ' +
-            'Please provide a manual duration with --duration <seconds>.'
-          );
-        }
-      }
+    // Route this browser's audio to its per-worker sink (parallel mode)
+    // Must happen after play() since Chromium only creates PulseAudio sink inputs when audio starts
+    if (parallelMode && browser.process()) {
+      const browserPid = browser.process().pid;
+      jlog(`Browser PID: ${browserPid}, routing audio to ${sinkName}...`);
+      await moveBrowserSinkInputs(sinkName, browserPid);
     }
 
-    jlog('Video is playing');
+    jlog('Video is playing, recording in progress...');
 
     // Step 7: Wait for recording duration
-    jlog('Recording in progress...');
-    const totalTime = actualDuration + bufferTime;
-
     for (let i = 1; i <= totalTime; i++) {
       await sleep(1000);
       const remaining = totalTime - i;
@@ -319,28 +324,45 @@ async function recordUrl(options) {
 
     jlog('Recording duration completed');
 
-    // Stop recording gracefully
+    // Graceful shutdown in correct order
     jlog('Stopping recording...');
-    await stopRecording(ffmpegProcess, 10000);
-    cleanup.untrackProcess(`${jobId}-ffmpeg`);
+    await stopRecording(ffmpegProcess, 15000);
+    ffmpegProcess = null;
 
-    // Close browser
     jlog('Closing browser...');
     await closeBrowser(browser);
+    browser = null;
 
-    // Stop display
     jlog('Stopping display...');
     await stopDisplay(displayInfo);
-    cleanup.untrackProcess(`${jobId}-xvfb`);
+    displayInfo = null;
 
-    // Cleanup audio
     jlog('Cleaning up audio...');
     await cleanupAudioRecording(audioInfo.sinkName);
-  });
+    audioInfo = null;
 
-  return { success: true, outputPath };
+    return { success: true, outputPath };
   } catch (error) {
     jlog(`ERROR: ${error.message}`);
+
+    // Emergency cleanup — kill anything still running
+    try {
+      if (ffmpegProcess) {
+        await stopRecording(ffmpegProcess, 5000).catch(() => {});
+      }
+      if (browser) {
+        await closeBrowser(browser).catch(() => {});
+      }
+      if (displayInfo) {
+        await stopDisplay(displayInfo).catch(() => {});
+      }
+      if (audioInfo) {
+        await cleanupAudioRecording(audioInfo.sinkName).catch(() => {});
+      }
+    } catch (_) {
+      // Ignore cleanup errors
+    }
+
     return { success: false, outputPath, error: error.message };
   }
 }
