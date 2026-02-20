@@ -44,16 +44,29 @@ Automated screen recorder for capturing webpage videos with synchronized audio u
     Output.mp4
 ```
 
+## Quick Start
+
+```bash
+# Clone and install
+git clone <repository-url>
+cd webpage-video-recorder
+npm install
+
+# Record a single video (auto-detects duration)
+./record.sh --url "https://example.com/video" --output recordings/my-video.mp4
+
+# Batch record from a URL list
+./record.sh --batch recordings/urls.txt --batch-output-dir recordings
+```
+
+> **Important:** Always use `./record.sh` instead of `node record.js`. The wrapper script automatically detects your platform — on macOS it runs via Docker (required since Xvfb, PulseAudio, and ffmpeg are Linux-only), and on Linux it runs Node.js directly.
+
 ## Prerequisites
 
-### For Docker (Recommended)
+- **Docker 20.10+** (required on macOS; recommended on Linux)
+- **Node.js 18.0+** (for `npm install` and direct Linux usage)
 
-- Docker 20.10+
-- Docker Compose 1.29+
-
-### For Local Installation
-
-- Node.js 18.0+
+For direct Linux usage without Docker, you also need:
 - Xvfb: `apt-get install xvfb`
 - ffmpeg: `apt-get install ffmpeg`
 - PulseAudio: `apt-get install pulseaudio pulseaudio-utils`
@@ -61,70 +74,70 @@ Automated screen recorder for capturing webpage videos with synchronized audio u
 
 ## Installation
 
-### Docker (Recommended)
-
 ```bash
 # Clone the repository
 git clone <repository-url>
 cd webpage-video-recorder
 
-# Build the Docker image
-docker-compose build
-
-# Or build manually
-docker build -t webpage-recorder .
-```
-
-### Local Installation
-
-```bash
-# Install dependencies
+# Install Node.js dependencies
 npm install
 
-# Make CLI executable globally (optional)
-npm link
-
-# Or run directly with node
-node record.js --help
+# Make the wrapper script executable (if not already)
+chmod +x record.sh
 ```
+
+The Docker image is built automatically the first time you run `./record.sh` on macOS.
 
 ## Usage
 
-### Basic Usage
+### Single Video Recording
 
 ```bash
-# Record a 30-second video
-node record.js \
+# Auto-detect video duration (recommended)
+./record.sh \
+  --url "https://example.com/video" \
+  --output recordings/recording.mp4
+
+# With manual duration (30 seconds)
+./record.sh \
   --url "https://example.com/video" \
   --duration 30 \
-  --output recording.mp4
+  --output recordings/recording.mp4
 ```
 
-### Docker Usage
+### Batch Recording
+
+Record multiple URLs from a file:
 
 ```bash
-# Using docker-compose (easiest)
-docker-compose run --rm recorder \
-  --url "https://example.com/video" \
-  --duration 30 \
-  --output /app/recordings/recording.mp4
+# Create a URL list file (one URL per line, # for comments)
+cat > recordings/urls.txt << 'EOF'
+# Project demo videos
+https://example.com/video-1
+https://example.com/video-2
+https://example.com/video-3
+EOF
 
-# Using docker directly
-docker run --rm -v $(pwd)/recordings:/app/recordings webpage-recorder \
-  --url "https://example.com/video" \
-  --duration 30 \
-  --output /app/recordings/recording.mp4
+# Record all URLs sequentially
+./record.sh --batch recordings/urls.txt --batch-output-dir recordings
+
+# Record in parallel (3 at a time, default)
+./record.sh --batch recordings/urls.txt --batch-output-dir recordings --concurrency 3
+
+# Record one at a time
+./record.sh --batch recordings/urls.txt --batch-output-dir recordings --concurrency 1
 ```
+
+Output files are auto-named based on the URL (e.g., `001-example-com-video-1.mp4`).
 
 ### Advanced Examples
 
 #### Custom Resolution and Quality
 
 ```bash
-node record.js \
+./record.sh \
   --url "https://example.com/video" \
-  --duration 60 \
-  --output recording.mp4 \
+  --output recordings/recording.mp4 \
   --resolution 1920x1080 \
   --framerate 60 \
   --quality 18 \
@@ -134,47 +147,53 @@ node record.js \
 #### Click Play Button Before Recording
 
 ```bash
-node record.js \
+./record.sh \
   --url "https://example.com/video" \
-  --duration 30 \
-  --output recording.mp4 \
+  --output recordings/recording.mp4 \
   --click-selector ".play-button" \
   --click-selector ".accept-cookies"
-```
-
-#### Auto-Detect Video Duration
-
-```bash
-node record.js \
-  --url "https://example.com/video" \
-  --duration 0 \
-  --output recording.mp4 \
-  --auto-detect-duration
 ```
 
 #### Custom Video Selector
 
 ```bash
-node record.js \
+./record.sh \
   --url "https://example.com/video" \
   --duration 30 \
-  --output recording.mp4 \
+  --output recordings/recording.mp4 \
   --video-selector "#player-video"
+```
+
+### Direct Docker Usage (Advanced)
+
+If you need to run Docker manually instead of using `record.sh`:
+
+```bash
+# Build the image
+docker build -t webpage-recorder .
+
+# Run a recording
+docker run --rm -v $(pwd)/recordings:/app/recordings webpage-recorder \
+  --url "https://example.com/video" \
+  --output /app/recordings/recording.mp4
 ```
 
 ## CLI Options
 
 | Option | Alias | Type | Default | Description |
 |--------|-------|------|---------|-------------|
-| `--url` | `-u` | string | required | URL of the webpage to record |
-| `--duration` | `-d` | number | required | Recording duration in seconds |
-| `--output` | `-o` | string | required | Output file path |
+| `--url` | `-u` | string | | URL of the webpage to record |
+| `--duration` | `-d` | number | | Recording duration in seconds (optional with auto-detect) |
+| `--output` | `-o` | string | | Output file path (required with `--url`) |
+| `--batch` | | string | | Path to URL list file for batch recording |
+| `--batch-output-dir` | | string | `./recordings` | Output directory for batch recordings |
+| `--concurrency` | | number | `3` | Number of parallel recordings (batch mode) |
 | `--resolution` | `-r` | string | `1920x1080` | Video resolution (WIDTHxHEIGHT) |
 | `--framerate` | `-f` | number | `30` | Video framerate (fps) |
 | `--display` | | number | `99` | X display number to use |
 | `--video-selector` | `-s` | string | `video` | CSS selector for video element |
 | `--click-selector` | `-c` | array | `[]` | CSS selectors to click before recording |
-| `--auto-detect-duration` | | boolean | `false` | Auto-detect video duration from DOM |
+| `--auto-detect-duration` | | boolean | `true` | Auto-detect video duration from DOM |
 | `--buffer` | `-b` | number | `2` | Extra buffer time after duration (seconds) |
 | `--quality` | `-q` | number | `23` | Video quality (CRF: 0-51, lower is better) |
 | `--preset` | | string | `fast` | ffmpeg encoding preset |
@@ -290,13 +309,17 @@ Approximate file sizes for 1 minute of recording:
 
 ```
 webpage-video-recorder/
+├── record.sh           # Wrapper script (use this! auto-detects platform)
+├── record.js           # Main CLI script (Node.js entry point)
 ├── lib/
 │   ├── cleanup.js      # Resource cleanup coordinator
 │   ├── display.js      # Xvfb lifecycle management
 │   ├── audio.js        # PulseAudio virtual sink management
 │   ├── recorder.js     # ffmpeg recording orchestration
-│   └── browser.js      # Puppeteer navigation & video playback
-├── record.js           # Main CLI script
+│   ├── browser.js      # Puppeteer navigation & video playback
+│   └── batch.js        # Batch recording utilities
+├── recordings/         # Default output directory
+│   └── urls.txt        # URL list for batch recording
 ├── package.json        # Node.js dependencies
 ├── Dockerfile          # Docker image definition
 └── docker-compose.yml  # Docker Compose configuration
